@@ -1,19 +1,68 @@
 version: "3"
 
 vars:
+  G_SRC_CLP_FFI_JS_DIR: "{{.ROOT_DIR}}/src/clp_ffi_js"
   G_LINT_VENV_DIR: "{{.G_BUILD_DIR}}/lint-venv"
 
 tasks:
   check:
     cmds:
+      - task: "cpp-check"
       - task: "yml-check"
 
   fix:
     cmds:
+      - task: "cpp-fix"
       - task: "yml-fix"
 
   cpp-configs:
     cmd: "{{.ROOT_DIR}}/tools/yscope-dev-utils/lint-configs/symlink-cpp-lint-configs.sh"
+
+  clang-tidy:
+    vars:
+      FLAGS: >-
+        -p {{.G_CLP_FFI_JS_BUILD_DIR}}/compile_commands.json
+        --config-file=.clang-tidy
+    deps:
+      - "clp-ffi-js"
+      - "emsdk"
+    sources:
+      - "{{.TASKFILE}}"
+      - "src/clp_ffi_js/.clang-tidy"
+      - "src/clp_ffi_js/**/*.cpp"
+      - "src/clp_ffi_js/**/*.h"
+      - "src/clp_ffi_js/**/*.hpp"
+    cmds:
+      - |-
+        EXTRA_ARGS=$("{{.G_EMSDK_DIR}}/upstream/emscripten/em++" --cflags \
+          | tr ' ' '\n' \
+          | sed 's/^/--extra-arg /' \
+          | tr '\n' ' ')
+        find src/clp_ffi_js \
+          -type f \
+          \( -iname "*.cpp" -o -iname "*.h" -o -iname "*.hpp" \) \
+          -print0 | \
+            xargs -0 clang-tidy {{.FLAGS}} $EXTRA_ARGS
+
+  cpp-check:
+    sources: &cpp_source_files
+      - "{{.ROOT_DIR}}/.clang-format"
+      - "{{.TASKFILE}}"
+      - "{{.G_SRC_CLP_FFI_JS_DIR}}/.clang-format"
+      - "{{.G_SRC_CLP_FFI_JS_DIR}}/**/*.cpp"
+      - "{{.G_SRC_CLP_FFI_JS_DIR}}/**/*.h"
+      - "{{.G_SRC_CLP_FFI_JS_DIR}}/**/*.hpp"
+    cmds:
+      - task: "cpp"
+        vars:
+          FLAGS: "--dry-run"
+
+  cpp-fix:
+    sources: *cpp_source_files
+    cmds:
+      - task: "cpp"
+        vars:
+          FLAGS: "-i"
 
   yml:
     aliases:
@@ -29,6 +78,20 @@ tasks:
           .github \
           lint-tasks.yml \
           Taskfile.yml
+
+  cpp:
+    internal: true
+    requires:
+      vars: ["FLAGS"]
+    deps: ["cpp-configs", "venv"]
+    cmds:
+      - |-
+        . "{{.G_LINT_VENV_DIR}}/bin/activate"
+        find "{{.G_SRC_CLP_FFI_JS_DIR}}" \
+          -type f \
+          \( -iname "*.cpp" -o -iname "*.h" -o -iname "*.hpp" \) \
+          -print0 | \
+            xargs -0 clang-format {{.FLAGS}} -Werror
 
   venv:
     internal: true

@@ -59,6 +59,7 @@ tasks:
           OUTPUT_FILE: "{{.CHECKSUM_FILE}}"
 
   emsdk:
+    run: "once"
     vars:
       CHECKSUM_FILE: "{{.G_EMSDK_CHECKSUM}}"
       # Lock emsdk to version 3.1.67 to work around issue #6.
